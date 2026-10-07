@@ -35,12 +35,14 @@ def result(raw):
     if not isinstance(x["quotes"],list) or len(x["quotes"])>5: raise ValueError("bad quotes")
     return {"status":x["status"],"median":float(x["median"]),"spread_bps":float(x["spread_bps"]),"quotes":x["quotes"]}
 def assess(values,max_spread):
-    if len(values)!=3: return {"status":"UNAVAILABLE","median":0.0,"spread_bps":0.0,"quotes":[]}
-    # Providers can move by a few cents while validators fetch them. Commit a
-    # bounded market snapshot rather than pretending raw floating point bytes
-    # are stable across independent fetch times.
-    values=[round(v,-2) for v in values]
-    ordered=sorted(values); median=ordered[len(ordered)//2]; spread=(ordered[-1]-ordered[0])*10000/median if median else 0.0
+    if not 3<=len(values)<=5: return {"status":"UNAVAILABLE","median":0.0,"spread_bps":0.0,"quotes":[]}
+    # Keep the provider precision intact.  For an even-sized quorum the
+    # median is the arithmetic mean of the two middle observations; rounding
+    # ordinary quotes to hundreds would destroy the signal being measured.
+    ordered=sorted(float(v) for v in values)
+    middle=len(ordered)//2
+    median=ordered[middle] if len(ordered)%2 else (ordered[middle-1]+ordered[middle])/2
+    spread=(ordered[-1]-ordered[0])*10000/median if median else 0.0
     return {"status":"CONSISTENT" if spread<=max_spread else "OUTLIER","median":median,"spread_bps":spread,"quotes":values}
 
 class QuoteQuorum(gl.Contract):
